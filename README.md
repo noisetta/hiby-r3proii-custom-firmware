@@ -6,10 +6,15 @@ This project adds Arabic text rendering support to the HiBy R3 Pro II digital au
 
 By default the HiBy R3 Pro II cannot render Arabic script — Arabic text in music file names, folder names, and metadata tags shows as boxes with X's. This firmware modification adds 252 Arabic Unicode glyphs (U+0600–U+06FF) from the open-source Noto Naskh Arabic font into the device's Thai supplementary font file, enabling correct Arabic text rendering throughout the OS.
 
-- Arabic text in music metadata renders correctly ✓
-- Arabic folder and file names render correctly ✓
+- Arabic text in music metadata is now visible (previously showed as boxes) ✓
+- Arabic folder and file names are now visible ✓
 - All 13 original languages including Thai remain fully functional ✓
 - No other functionality is affected ✓
+
+**Known Limitations:**
+- Arabic text displays left-to-right instead of the correct right-to-left direction — this is a limitation of the HiBy OS text renderer which does not support bidirectional text
+- Arabic characters appear in their isolated forms and do not connect to each other — the OS renderer does not support Arabic contextual shaping
+- Arabic is readable but may appear unnatural to native Arabic readers
 
 ## Tested On
 
