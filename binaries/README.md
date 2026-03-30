@@ -1,6 +1,6 @@
 ﻿# Binaries
 
-This folder contains all the patched **hiby_player** binaires
+This folder contains all the patched **hiby_player** binaries
 
 ## Contributing with a patched Binary
 
