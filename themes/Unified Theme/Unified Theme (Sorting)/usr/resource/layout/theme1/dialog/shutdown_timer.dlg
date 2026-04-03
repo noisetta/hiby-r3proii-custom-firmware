@@ -11,7 +11,7 @@
 			"textview":{
 				"name":"shutdown_timer_tv_msg",
 				"size":30,
-				"color":"0xB30018",
+				"color":"0x32526c",
 				"type":"roll|h_center",
 				"ini":"system_ui.ini",
 				"text":"shutdowning",
