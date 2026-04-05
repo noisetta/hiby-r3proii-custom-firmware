@@ -23,7 +23,7 @@ Provides custom firmware builds and tools for modifying HiBy OS on supported dev
 ## Tested On
 
 - Device: HiBy R3 Pro II (r3proii)
-- Firmware version: current_version=0 (January 2026 release)
+- Base firmware: Stock HiBy OS (January 2026)
 - Host OS used for building: Ubuntu / Pop!_OS (Linux)
 
 > ⚠️ **Compatibility:** The pre-built firmware in this repository has only been
