@@ -34,6 +34,13 @@
 			"y":636,
 			"imageview":true
 		},
+		"imageview":{
+			"name":"screensavers_iv_bg",
+			"img_path":"screensavers\\text_bg_2.png",
+			"x":0,
+			"y":450,
+			"imageview":true
+		},
 		"textview":{
 				"name":"screensavers_tv_music_name",
 				"size":30,
@@ -43,7 +50,7 @@
 				"text":"hiby_music",
 				"x":36,
 				"y":485,
-				"w":438,
+				"w":408,
 				"h":40,
 				"textview":true
 			},
@@ -54,7 +61,7 @@
 				"type":"roll|left|top",
 				"x":36,
 				"y":525,
-				"w":438,
+				"w":408,
 				"h":40,
 				"textview":true
 			},
@@ -79,11 +86,11 @@
 		"content_y":0,
 		"content_w":480,
 		"content_h":720,
-		"scroll_max_x":480,
+		"scroll_max_x":0,
 		"scroll_min_x":0,
 		"scroll_max_y":0,
 		"scroll_min_y":-720,
-		"flag":"scroll",
+		"flag":"v_scroll",
 		"zorder":750,
 		"img_path":"screensavers\\bg.png",
 		"color_mode":"color_565",

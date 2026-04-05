@@ -71,7 +71,7 @@
 			"name":"pull_down_menu_iv_bluetooth",
 			"img_path":"topbar\\bluetooth_unconnect.png",
 			"img_focus_path":"topbar\\bluetooth.png",
-			"x":288,
+			"x":278,
 			"y":7,
 		    "visible":"hide",
 			"imageview":true
@@ -80,7 +80,7 @@
 			"name":"pull_down_menu_iv_hl",
 			"img_path":"topbar\\hl_disconnect.png",
 			"img_focus_path":"topbar\\hl_connect.png",
-			"x":323,
+			"x":313,
 			"y":7,
 			"visible":"hide",
 			"imageview":true
@@ -92,7 +92,7 @@
 			"img_focus_path_1":"topbar\\wifi_connect_1.png",
 			"img_focus_path_2":"topbar\\wifi_connect_2.png",
 			"img_focus_path_3":"topbar\\wifi_connect_3.png",
-			"x":354,
+			"x":344,
 			"y":7,
 			"visible":"hide",
 			"imageview":true
@@ -101,7 +101,7 @@
 			"name":"pull_down_menu_nv_battery",
 			"img_path":"topbar\\",
 			"align_type":"top",
-			"x":388,
+			"x":378,
 			"y":7,
 			"w":60,
 			"h":30,
@@ -114,8 +114,8 @@
 			"img_path_1":"topbar\\battery_charge_bg.png",
 			"img_path_2":"topbar\\battery_low_bg.png",
 			"img_focus_path":"topbar\\battery.png",
-			"x":450,
-			"y":7,
+			"x":440,
+			"y":10,
 			"imageview":true
 		},
 		"imageview":{

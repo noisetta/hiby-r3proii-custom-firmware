@@ -59,6 +59,26 @@ This is because the device uses the logo image inside the `etc` folder at boot a
 ![Before](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/Before/Logo.png)
 ![After](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/After/Logo.png)
 
+# 🆕 Latest Changes 🆕
+
+Modernized system prompts and toasts by modifying their respective `.view` o `.dlg` files.
+
+Battery was also modified to have a more modern look.
+
+Some examples:
+
+![Before](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/Before/Shutdown.png)
+![After](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/After/Shutdown.png)
+
+![Before](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/Before/WiFi%20Receive.png)
+![After](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/After/WiFi%20Receive.png)
+
+![Before](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/Before/Hiby%20Link.png)
+![After](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/After/Hiby%20Link.png)
+
+![Before](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/Before/Update.png)
+![After](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/After/Update.png)
+
 # Difference between the two theme variants
 
 The **Normal** theme is for use with the **orignial** `hiby_player` binary.
