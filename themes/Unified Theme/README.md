@@ -79,17 +79,13 @@ Some examples:
 ![Before](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/Before/Update.png)
 ![After](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/After/Update.png)
 
-# Difference between theme variants
+# Difference between the two theme variants
 
 The **Normal** theme is for use with the **orignial** `hiby_player` binary.
 
-The **Sorted** theme is for use with the **patched** `hiby_player`binary with the sorting patch.
+The **Sorted** theme is for use with the **patched** `hiby_player`binary that have the sorting fix.
 
-The **Sorted + DB Manager** is for use with the **patched** `hiby_player` binary with both the sorting patch and the DB Manager
-
-The difference between **Normal**, **Sorted** and **Sorted + DB Manager** is the scrollbar with letters that appears on the right side.
-
-Only **Sorted** and **Sorted + DB Manager** have this.
+The main difference is the scrollbar with letters that appears on the right side.
 
 For the Normal variant the scrollbar starts with `A` and finishes with `#`
 
