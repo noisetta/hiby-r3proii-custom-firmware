@@ -1,0 +1,118 @@
+#!/bin/sh
+rm /var/run/messagebus.pid -rf
+mkdir -p /tmp/dbus
+mkdir -p /var/lib/dbus
+dbus-uuidgen > /var/lib/dbus/machine-id
+dbus-daemon --config-file=/usr/share/dbus-1/system.conf
+
+echo "=== BT power on ===" && date +%T.%3N
+echo 1 > /sys/class/rfkill/rfkill0/state
+sleep 0.3
+
+if [ -f /usr/data/btmacaddr.txt ]; then
+    rm -f /usr/data/btmacaddr.txt
+fi
+bt_mac_file="/usr/data/bt_macaddr.txt"
+mac_prefix="4C:BC:98:B0"
+min_suffix_dec=10240
+max_suffix_dec=14336
+num_possible_values=$(( max_suffix_dec - min_suffix_dec + 1 ))
+if [ -f "$bt_mac_file" ]; then
+    bt_addr=$(cat "$bt_mac_file")
+else
+    if [ "$num_possible_values" -le 0 ]; then
+        random_offset=0
+    else
+        random_offset=$(awk -v n_val="$num_possible_values" 'BEGIN{srand(); print int(rand() * n_val)}')
+    fi
+    random_suffix_dec=$(( min_suffix_dec + random_offset ))
+    o5_val_dec=$(( random_suffix_dec / 256 ))
+    o6_val_dec=$(( random_suffix_dec % 256 ))
+    o5_hex=$(printf "%02X" "$o5_val_dec")
+    o6_hex=$(printf "%02X" "$o6_val_dec")
+    bt_addr="${mac_prefix}:${o5_hex}:${o6_hex}"
+    target_dir=$(dirname "$bt_mac_file")
+    mkdir -p "$target_dir"
+    echo "$bt_addr" > "$bt_mac_file"
+fi
+echo "BT_MACADDR $bt_addr"
+
+CHIPVENDOR_PATH=/sys/devices/platform/md_ingenic,mmc.0/mmc_host/mmc0/mmc0:0001/mmc0:0001:2/chipvendor
+if [ -f $CHIPVENDOR_PATH ]; then
+    chipvendor=$(cat $CHIPVENDOR_PATH)
+    case $chipvendor in
+        0x81)
+            firmware=BCM4343A1_001.002.009.0122.0538.hcd
+            ;;
+        *)
+            firmware=BCM4343A1_001.002.009.1010.1030.hcd
+            ;;
+    esac
+else
+    firmware=BCM4343A1_001.002.009.0122.0538.hcd
+fi
+echo "Selected firmware: $firmware"
+
+echo "=== Starting brcm_patchram_plus ===" && date +%T.%3N
+brcm_patchram_plus --enable_hci --baudrate 3000000 --no2bytes \
+    --patchram /lib/firmware/bt_bcm/$firmware /dev/ttyS0 \
+    --tosleep=50000 --use_baudrate_for_download --enable_lpm \
+    --bd_addr $bt_addr &
+
+echo "=== Waiting for hci0 ===" && date +%T.%3N
+for i in $(seq 1 50); do
+    hciconfig hci0 2>/dev/null && break
+    sleep 0.1
+done
+
+echo "=== hciconfig up ===" && date +%T.%3N
+hciconfig hci0 up
+sleep 0.3
+
+echo "=== Starting bluetoothd ===" && date +%T.%3N
+/usr/libexec/bluetooth/bluetoothd -E -C &
+hciconfig hci0 reset
+sleep 0.3
+
+echo "=== Starting bt-agent ===" && date +%T.%3N
+bt-agent -c NoInputNoOutput &
+sleep 0.5
+
+echo "=== Starting bluealsa ===" && date +%T.%3N
+/usr/bin/bluealsa -p a2dp-source --a2dp-volume &
+
+ALSA_CONF_FILE="/usr/data/alsa.conf"
+if [ ! -f "$ALSA_CONF_FILE" ]; then
+    cat <<EOF > "$ALSA_CONF_FILE"
+pcm.bt_alsa_sink {
+    type plug
+    slave {
+        pcm {
+            type bluealsa
+            device XX:XX:XX:XX:XX:XX
+            profile "a2dp"
+            codec "ldac"
+            ldac_eqmid "LDAC_ABR"
+            uat_eqmid "UAT_600"
+        }
+    }
+}
+EOF
+else
+    echo "File $ALSA_CONF_FILE already exists."
+fi
+sleep 0.3
+
+echo "=== bt-adapter setup ===" && date +%T.%3N
+if [ -f /usr/resource/bt_name ]; then
+    bt-adapter --set "Powered" "On"
+    bt_name=$(cat /usr/resource/bt_name)
+    bt-adapter --set "Alias" "$bt_name"
+    sleep 0.3
+    sdptool add HIBYLINK_SP
+fi
+
+echo "=== Done ===" && date +%T.%3N
+bt-adapter --set "Powered" "Off"
+mkdir -p /tmp
+echo > /tmp/bt_init_ok

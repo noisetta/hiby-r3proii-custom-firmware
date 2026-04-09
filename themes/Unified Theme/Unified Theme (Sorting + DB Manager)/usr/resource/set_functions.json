@@ -1,0 +1,37 @@
+[
+    {
+        "type":"sys_set",
+        "funs":[
+            {"language":1},
+            {"backlight_set":1},
+            {"color":1},
+            {"theme":1},
+            {"font_size":1},
+            {"usb_working_mode":1},
+            {"usb_mode":0},
+            {"dac_charge_disable":0},
+            {"dac_feedback":1},
+            {"car_mode":0},
+            {"car_mode_auto_play":0},
+            {"time_set":1},
+            {"powersave_switch":1},
+            {"sleep_switch":1},
+            {"battery_percent":1},
+            {"standby":1},
+            {"line_control":1},
+            {"led":1},
+            {"double_touch_wakeup":1},
+            {"lock_key":1},
+            {"volkey_locked":0},
+            {"pull_menu_type":1},
+            {"screensaver":1},
+            {"rotation":0},
+            {"restore":1},
+            {"upgrade":1},
+            {"certificate":1},
+            {"operating_instruction":1},
+            {"about":1}
+        ]
+    }
+]
+    

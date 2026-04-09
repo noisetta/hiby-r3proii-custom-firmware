@@ -10,11 +10,14 @@ This project is part of the [hiby-modding](https://github.com/hiby-modding) orga
 
 Provides custom firmware builds and tools for modifying HiBy OS on supported devices. Modifications are built on top of the stock firmware and distributed as ready-to-flash `.upt` files.
 
-**Current modifications in v1.3:**
-- Unified Theme — modernized UI including updated system dialogs, battery icon, WiFi/BT scanning dialogs, volume bar, screensaver refinements, and navigation icons
+**Current modifications in v1.4+:**
+- Database Manager — new Settings menu entry to save/load the music library database to/from SD card without rescanning. Supports all 13 languages.
+- PC Database Updater — Python script and GUI app to generate the music library database on your PC in seconds
+- Unified Theme — modernized UI including updated system dialogs, battery icon, WiFi/BT scanning dialogs, and more
 - Alphabetical sorting — multi-language article support, symbols sort to top, updated scrollbar
 - Extended Unicode font support — adds rendering for scripts not included in the stock firmware
 - ADB support — root shell access via USB, enabled through a hidden easter egg
+- Custom firmware identifier — About page shows `1.4+` to distinguish from stock
 
 **Known Limitations:**
 - Added Unicode scripts display left-to-right regardless of the script's natural reading direction — the HiBy OS text renderer does not support bidirectional text
@@ -34,7 +37,7 @@ Provides custom firmware builds and tools for modifying HiBy OS on supported dev
 
 If you just want to flash the latest modifications without building from source:
 
-1. Download `r3proii-v1.3.upt` from the [Releases](https://github.com/hiby-modding/hiby-mods/releases) section
+1. Download `r3proii-v1.4-hmod.upt` from the [Releases](https://github.com/hiby-modding/hiby-mods/releases) section
 2. Verify the checksum matches the one listed in the release notes
 3. Copy it to the root of your SD card and rename it to `r3proii.upt`
 4. Insert the SD card into your HiBy R3 Pro II
@@ -43,7 +46,19 @@ If you just want to flash the latest modifications without building from source:
 7. Remove the SD card before the device reboots
 8. Done
 
-> **Note:** If something goes wrong, you can always restore by flashing the original stock firmware from HiBy's website using the same procedure.
+> **Note:** After flashing go to **Settings → UI Themes** and reselect your preferred theme to ensure the correct boot logo displays.
+
+> **Recovery:** If something goes wrong, you can always restore by flashing the original stock firmware from HiBy's website using the same procedure.
+
+## Using the Database Manager
+
+Instead of waiting for the device to rescan your music library, generate the database on your PC in seconds:
+
+1. Insert your SD card into your PC
+2. Run `tools/Update_Database.py` or use the GUI app
+3. Insert the SD card back into the device
+4. Go to **Settings → Database Manager → Copy Database from SD**
+5. The library reloads instantly — no rescan needed
 
 ## Enabling ADB
 
@@ -69,8 +84,6 @@ sudo apt install squashfs-tools xorriso fontforge python3-fontforge p7zip-full
 
 ### Using the Mod Tool (Recommended)
 
-The easiest way to build custom firmware is using the interactive mod tool:
-
 ```bash
 # 1. Clone this repository
 git clone https://github.com/hiby-modding/hiby-mods
@@ -82,8 +95,6 @@ cd hiby-mods
 ./tools/universal_mod_tool.sh
 ```
 
-The tool will interactively ask which modifications to apply and handle all the repacking automatically.
-
 ### Manual Build
 
 ```bash
@@ -94,10 +105,8 @@ cd hiby-mods
 # 2. Download the stock firmware from HiBy's website
 # Place it at: firmware/r3proii_stock.upt
 
-# 3. Run the build script
-./tools/build_upt.sh firmware/r3proii_stock.upt firmware/r3proii-custom.upt
-
-# 4. Flash the output file as described in Quick Install above
+# 3. Run the rebuild script
+./tools/rebuild.sh
 ```
 
 ## Repository Structure
@@ -106,42 +115,41 @@ cd hiby-mods
 hiby-mods/
 ├── README.md
 ├── binaries/
-│   └── Sorting Fix/          # Patched hiby_player binary
-│       ├── hiby_player
-│       └── Sorting Patch README.md
+│   ├── Sorting Patch/        # Sorting-only patched binary
+│   └── DB Manager Patch/     # Sorting + Database Manager patched binary
 ├── docs/
-│   └── FIRMWARE_FORMAT.md    # Detailed OTA format documentation
+│   ├── FIRMWARE_FORMAT.md    # Detailed OTA format documentation
+│   └── SCREENSHOTS.md        # ADB screenshot guide
 ├── themes/
-│   └── Unified Theme/        # Community UI theme
+│   └── Unified Theme/        # Community UI theme (3 variants)
 ├── tools/
 │   ├── build_upt.sh          # Manual build script
 │   ├── merge_arabic_font.py  # Font merging utility
 │   ├── universal_mod_tool.sh # Interactive mod tool
-│   └── MOD_TOOL.md           # Mod tool documentation
+│   ├── MOD_TOOL.md           # Mod tool documentation
+│   ├── rebuild.sh            # Quick rebuild script
+│   ├── Update_Database.py    # PC database updater script
+│   └── Update Database README.md
 └── firmware/
-    ├── r3proii-arabic.upt    # v1.0 pre-built firmware
-    ├── r3proii-v1.1.upt      # v1.1 pre-built firmware
-    ├── r3proii-v1.2.upt      # v1.2 pre-built firmware
-    └── r3proii-v1.3.upt      # v1.3 pre-built firmware (latest)
+    ├── r3proii-arabic.upt    # v1.0
+    ├── r3proii-v1.1.upt      # v1.1
+    ├── r3proii-v1.2.upt      # v1.2
+    ├── r3proii-v1.3.upt      # v1.3
+    └── r3proii-v1.4-hmod.upt # v1.4+ (latest)
 ```
 
 ## Documentation
 
-See [docs/FIRMWARE_FORMAT.md](docs/FIRMWARE_FORMAT.md) for complete documentation of:
+See [docs/FIRMWARE_FORMAT.md](docs/FIRMWARE_FORMAT.md) for complete documentation of the OTA update format, partition layout, boot sequence and hardware details.
 
-- The OTA update file format
-- Chunk naming and hash chain system
-- Squashfs build parameters
-- Partition layout
-- Boot sequence
-- Font system
-- Hardware details
-
-See [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) for a guide on capturing screenshots from the device via ADB, including framebuffer details, known limitations with IPU-rendered content, and a quick reference script.
-
-This documentation was produced entirely through reverse engineering and may be useful for anyone wanting to build further modifications.
+See [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) for a guide on capturing screenshots from the device via ADB.
 
 ## Changelog
+
+### v1.4+
+- Database Manager — load/save music library database via Settings menu, all 13 languages supported
+- PC Database Updater — Python script and GUI app for fast library generation on PC
+- Custom firmware identifier — About page now shows `1.4+`
 
 ### v1.3
 - Updated Unified Theme — expanded system dialog modernization, new icons throughout
@@ -176,11 +184,10 @@ Contributions are welcome. Areas where help would be valuable:
 - GUI and theme modifications
 - RockBox Bluetooth/WiFi integration
 - Further ADB exploration and live system research
-- Improving the build process
 
 ## Acknowledgements
 
-- [@Jepl4r](https://github.com/Jepl4r) — Unified Theme, alphabetical sorting patch, mod tool
+- [@Jepl4r](https://github.com/Jepl4r) — Unified Theme, sorting patch, Database Manager, PC database updater, mod tool
 - [@Tartarus6](https://github.com/Tartarus6) — hiby_os_crack tooling and collaboration
 - Noto Naskh Arabic font by Google (OFL licensed)
 - HiBy Music for making a great device

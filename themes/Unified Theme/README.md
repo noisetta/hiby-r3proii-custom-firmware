@@ -1,4 +1,4 @@
-﻿# Unified Theme for Hiby R3 Pro II
+# Unified Theme for Hiby R3 Pro II
 
 # List of changes
 
@@ -79,13 +79,15 @@ Some examples:
 ![Before](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/Before/Update.png)
 ![After](https://github.com/Jepl4r/hiby-mods/blob/unified_theme/themes/Unified%20Theme/Screenshots/After/Update.png)
 
-# Difference between the two theme variants
+# Difference between the theme variants
 
 The **Normal** theme is for use with the **orignial** `hiby_player` binary.
 
-The **Sorted** theme is for use with the **patched** `hiby_player`binary that have the sorting fix.
+The **Sorted** theme is for use with the **patched** `hiby_player` binary with the Sorting Patch.
 
-The main difference is the scrollbar with letters that appears on the right side.
+The **Sorted + DB Manager** is for use with the **patched** `hiby_player` binary with both Sorting and DB Managager Patches.
+
+The main difference is the scrollbar with letters that appears on the right side. (The **Normal** variant remains unchanged)  
 
 For the Normal variant the scrollbar starts with `A` and finishes with `#`
 
