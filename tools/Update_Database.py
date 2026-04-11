@@ -4,8 +4,7 @@ HiBy DAP - Media Database Updater
 Scans the SD card and rebuilds usrlocal_media.db
 
 Compatible with macOS, Linux, and Windows.
-Can be run from any directory — the script will auto-detect mounted
-volumes or prompt you to select the SD card drive.
+Place in the SD card root (next to usrlocal_media.db) and run.
 
 Requirements:
     pip install mutagen
@@ -14,43 +13,10 @@ Requirements:
 import os
 import re
 import sqlite3
-import sys
 import time
 import errno
 import unicodedata
 from mutagen import File
-
-
-# ── Terminal colors ───────────────────────────────────────────────────────────
-
-def _colors_supported() -> bool:
-    """Check if the terminal supports ANSI color codes."""
-    if os.environ.get("NO_COLOR"):
-        return False
-    if os.name == "nt":
-        # Windows 10+ supports ANSI if we enable virtual terminal processing
-        try:
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            # STD_OUTPUT_HANDLE = -11, ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x4
-            handle = kernel32.GetStdHandle(-11)
-            mode = ctypes.c_ulong()
-            kernel32.GetConsoleMode(handle, ctypes.byref(mode))
-            kernel32.SetConsoleMode(handle, mode.value | 0x4)
-            return True
-        except Exception:
-            return False
-    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
-
-_USE_COLOR = _colors_supported()
-
-def _c(code: str, text: str) -> str:
-    return f"\033[{code}m{text}\033[0m" if _USE_COLOR else text
-
-def green(text: str)  -> str: return _c("32", text)
-def red(text: str)    -> str: return _c("31", text)
-def yellow(text: str) -> str: return _c("33", text)
-def bold(text: str)   -> str: return _c("1", text)
 
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -244,114 +210,11 @@ def find_lrc(audio_path: str, sd: str):
 
 # ── SD card detection ─────────────────────────────────────────────────────────
 
-def _list_volumes():
-    """
-    List mounted volumes / drive letters that look like removable media.
-    Returns a list of (path, label) tuples.
-    """
-    volumes = []
-    system = os.name  # 'nt' on Windows, 'posix' on macOS/Linux
-
-    if system == "nt":
-        # Windows: iterate drive letters, check for removable/fixed drives
-        import ctypes
-        bitmask = ctypes.windll.kernel32.GetLogicalDrives()
-        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-            if bitmask & 1:
-                drive = f"{letter}:\\"
-                # GetDriveTypeW: 2=removable, 3=fixed, 4=network, 5=cdrom, 6=ramdisk
-                dtype = ctypes.windll.kernel32.GetDriveTypeW(drive)
-                if dtype in (2, 3):  # removable or fixed
-                    try:
-                        label_buf = ctypes.create_unicode_buffer(256)
-                        ctypes.windll.kernel32.GetVolumeInformationW(
-                            drive, label_buf, 256, None, None, None, None, 0
-                        )
-                        label = label_buf.value or letter
-                    except Exception:
-                        label = letter
-                    if os.path.isdir(drive):
-                        volumes.append((drive, f"{label} ({drive.rstrip(chr(92))})"))
-            bitmask >>= 1
-
-    elif hasattr(os, "uname") and os.uname().sysname == "Darwin":
-        # macOS: /Volumes/*
-        vol_root = "/Volumes"
-        if os.path.isdir(vol_root):
-            for name in sorted(os.listdir(vol_root)):
-                path = os.path.join(vol_root, name)
-                if os.path.isdir(path) and not name.startswith("."):
-                    volumes.append((path, name))
-
-    else:
-        # Linux: /media/$USER/*, /mnt/*, /run/media/$USER/*
-        user = os.environ.get("USER", "")
-        candidates = []
-        for base in [f"/media/{user}", "/mnt", f"/run/media/{user}"]:
-            if os.path.isdir(base):
-                try:
-                    candidates += [
-                        os.path.join(base, d) for d in sorted(os.listdir(base))
-                        if os.path.isdir(os.path.join(base, d))
-                    ]
-                except OSError:
-                    pass
-        for path in candidates:
-            volumes.append((path, os.path.basename(path)))
-
-    return volumes
-
-
 def find_sd():
-    """
-    Detect the SD card.
-    Priority: 1) script directory, 2) cwd, 3) auto-detect volumes with db,
-              4) interactive selection from mounted volumes.
-    """
-    # 1) Check script directory and cwd (original behaviour)
     for d in [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]:
         if os.path.exists(os.path.join(d, DB_NAME)):
             return d
-
-    # 2) List mounted volumes
-    volumes = _list_volumes()
-    if not volumes:
-        return None
-
-    # 3) Auto-detect: if exactly one volume has the db, use it
-    with_db = [(p, l) for p, l in volumes if os.path.exists(os.path.join(p, DB_NAME))]
-    if len(with_db) == 1:
-        return with_db[0][0]
-
-    # 4) Interactive selection
-    print()
-    print(bold("Select the SD card drive:"))
-    print()
-    for i, (path, label) in enumerate(volumes, 1):
-        has_db = green(" [usrlocal_media.db found]") if os.path.exists(os.path.join(path, DB_NAME)) else ""
-        print(f"  {i}) {label}  —  {path}{has_db}")
-    print(f"  0) Cancel")
-    print()
-
-    while True:
-        try:
-            choice = input("Enter number: ").strip()
-            if not choice:
-                continue
-            n = int(choice)
-            if n == 0:
-                return None
-            if 1 <= n <= len(volumes):
-                selected = volumes[n - 1][0]
-                if not os.path.exists(os.path.join(selected, DB_NAME)):
-                    print(yellow(f"\n  WARNING: {DB_NAME} not found in {selected}."))
-                    confirm = input("  Continue anyway? The database will be created. [y/N]: ").strip().lower()
-                    if confirm not in ("y", "yes"):
-                        continue
-                return selected
-            print(red(f"  Please enter a number between 0 and {len(volumes)}."))
-        except (ValueError, EOFError):
-            return None
+    return None
 
 
 # ── Tag reading ─────────────────────────────────────────────────────────────
@@ -698,11 +561,11 @@ def rebuild_db(sd: str):
     print(f"  Tags read in {time.time()-t1:.1f}s")
 
     if _tag_failures:
-        print(yellow(f"\n  WARNING: Mutagen failed to read {len(_tag_failures)} file(s):"))
+        print(f"\n  WARNING: Mutagen failed to read {len(_tag_failures)} file(s):")
         for path, err in _tag_failures:
-            print(yellow(f"    {path}"))
+            print(f"    {path}")
             if err:
-                print(yellow(f"      {err}"))
+                print(f"      {err}")
         print()
 
     t2 = time.time()
@@ -840,15 +703,15 @@ def rebuild_db(sd: str):
 
     print(f"  Database written in {time.time()-t2:.1f}s")
     print()
-    print(green("=" * 50))
-    print(green(f"  Done in {time.time()-t0:.1f}s"))
-    print(green(f"  Tracks:        {total}"))
-    print(green(f"  Albums:        {len(albums_count)}"))
-    print(green(f"  Artists:       {len(artists_count)}"))
-    print(green(f"  Genres:        {len(genres_count)}"))
-    print(green(f"  Album artists: {len(albart_count)}"))
-    print(green(f"  Playlists:     {len(playlists)}"))
-    print(green("=" * 50))
+    print("=" * 50)
+    print(f"  Done in {time.time()-t0:.1f}s")
+    print(f"  Tracks:        {total}")
+    print(f"  Albums:        {len(albums_count)}")
+    print(f"  Artists:       {len(artists_count)}")
+    print(f"  Genres:        {len(genres_count)}")
+    print(f"  Album artists: {len(albart_count)}")
+    print(f"  Playlists:     {len(playlists)}")
+    print("=" * 50)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -856,14 +719,10 @@ def rebuild_db(sd: str):
 def main():
     sd = find_sd()
     if not sd:
-        print(red("No SD card selected."))
+        print("ERROR: usrlocal_media.db not found.")
+        print("Run the script from the SD card root or the folder containing the database.")
         return
-    print(f"SD card: {sd}")
-    if not os.path.exists(os.path.join(sd, DB_NAME)):
-        print(red(f"ERROR: {DB_NAME} not found."))
-        print(red(f"  The SD card must already contain the database file"))
-        print(red(f"  (copy one from the device first)."))
-        return
+    print(f"SD card detected: {sd}")
     rebuild_db(sd)
 
 
