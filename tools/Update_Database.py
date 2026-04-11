@@ -8,9 +8,10 @@ Can be run from any directory — the script will auto-detect mounted
 volumes or prompt you to select the SD card drive.
 
 Requirements:
-    pip install mutagen
+    pip install mutagen Pillow
 """
 
+import io
 import os
 import re
 import sqlite3
@@ -28,11 +29,9 @@ def _colors_supported() -> bool:
     if os.environ.get("NO_COLOR"):
         return False
     if os.name == "nt":
-        # Windows 10+ supports ANSI if we enable virtual terminal processing
         try:
             import ctypes
             kernel32 = ctypes.windll.kernel32
-            # STD_OUTPUT_HANDLE = -11, ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x4
             handle = kernel32.GetStdHandle(-11)
             mode = ctypes.c_ulong()
             kernel32.GetConsoleMode(handle, ctypes.byref(mode))
@@ -56,6 +55,7 @@ def bold(text: str)   -> str: return _c("1", text)
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 DB_NAME = "usrlocal_media.db"
+ART_TARGET_SIZE = (360, 360)
 
 AUDIO_EXT = {
     ".iso", ".dff", ".dsf", ".ape", ".flac", ".aif", ".wav",
@@ -63,8 +63,6 @@ AUDIO_EXT = {
 }
 PLAYLIST_EXT = {".m3u", ".m3u8"}
 
-# Format codes confirmed from a real HiBy R3 Pro II database.
-# Others derived from Windows WAVE Format Tags.
 FORMAT_MAP = {
     ".flac": 61868,
     ".dsf":  54736,
@@ -86,9 +84,8 @@ FORMAT_MAP = {
 
 LOSSY_EXT = {".mp3", ".mp2", ".aac", ".m4a", ".m4b", ".ogg", ".oga", ".wma", ".opus"}
 DSD_EXT   = {".dsf", ".dff", ".iso"}
-DSD_SET   = {".dsf", ".dff"}   # formats that use raw ID3 frames
+DSD_SET   = {".dsf", ".dff"}
 
-# ID3 frame → easy key mapping for DSF/DFF (File(easy=True) is silently ignored)
 ID3_MAP = {
     "TIT2": "title",       "TPE1": "artist",
     "TALB": "album",       "TCON": "genre",
@@ -102,76 +99,40 @@ COVER_NAMES = {
     "cover.png",  "folder.png",  "front.png",
 }
 
-# Articles stripped before sort key computation.
-# List derived from disassembly of the patched HiBy binary (cave at 0x41b8b0).
 _ARTICLES_RE = re.compile(
     r"^(the|der|die|das|les|il|lo|la|le|el)\s+",
     flags=re.IGNORECASE,
 )
-
-# Leading punctuation stripped before articles (binary function 0x41bce0).
 _PUNCT_RE = re.compile(r"""^[(."']+""")
-
-# Track-number prefix stripped from filenames used as fallback titles.
 _TRACK_PREFIX_RE = re.compile(r"^\d{1,3}\s*[-\u2013.]\s*")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def sanitize(s) -> str:
-    """Strip embedded NUL bytes and whitespace. Prevents SQLite UNIQUE failures."""
     if s is None:
         return ""
     return str(s).replace("\x00", "").strip()
 
-
 def nul(s) -> str:
-    """Append the NUL terminator required by HiBy for all text fields."""
     return sanitize(s) + "\x00"
 
-
 def ascii_upper(s: str) -> str:
-    """
-    ASCII-only uppercase: a-z → A-Z, accented characters unchanged.
-    The HiBy device uses C toupper() which only operates on ASCII,
-    so we replicate that behaviour for the pinyin_charater sort key.
-    """
     return s.translate(str.maketrans(
         "abcdefghijklmnopqrstuvwxyz",
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
     ))
 
-
 def hiby_path(path: str, sd: str) -> str:
-    """
-    Convert an absolute path to a HiBy-style path (a:\\...).
-    Normalises to NFC: macOS exFAT returns filenames in NFD,
-    but the HiBy device stores paths in NFC in its database.
-    """
     rel = os.path.relpath(path, sd)
     rel = unicodedata.normalize("NFC", rel)
     return "a:\\" + rel.replace("/", "\\")
 
-
 def _normalize(text: str) -> str:
-    """
-    Apply the same normalization as the patched HiBy runtime sort:
-      1. Strip leading punctuation: ( . " '   (binary 0x41bce0)
-      2. Strip leading article: the/der/die/das/les/il/lo/la/le/el  (0x41b8b0)
-    """
     s = _PUNCT_RE.sub("", text.strip())
     return _ARTICLES_RE.sub("", s)
 
-
 def _sort_tier(ch: str) -> int:
-    """
-    Character category matching the patched binary collation (0x41bb30):
-      0 = symbol / Unicode 0x2000-0x2FFF
-      1 = digit  (0-9)
-      2 = letter (A-Z, a-z, >= 0xC0)
-    The 0x2000-0x2FFF check must come before >= 0xC0, otherwise symbols
-    like U+2020 (†) are misclassified as letters.
-    """
     if not ch:
         return 0
     cp = ord(ch)
@@ -183,31 +144,19 @@ def _sort_tier(ch: str) -> int:
         return 2
     return 0
 
-
 def sort_key(text: str) -> tuple:
-    """Sort key replicating the patched HiBy binary: (tier, normalised_lower)."""
     norm = _normalize(text)
     if not norm:
         return (0, text.lower())
     return (_sort_tier(norm[0]), norm.lower())
 
-
 def sort_character(text: str) -> str:
-    """
-    Compute the 'character' index field used by the HiBy alphabetical sidebar.
-    Matches binary logic 0x41bce0 → 0x41b8b0.
-    """
     if not text:
         return "#"
     norm = _normalize(text)
     return norm[0].upper() if norm else "#"
 
-
 def quality_tier(ext: str, samplerate: int) -> str:
-    """
-    HiBy quality tier stored in the 'quality' field:
-      0 = unknown, 1 = lossy, 2 = lossless (<=48 kHz), 3 = hi-res / DSD
-    """
     if not samplerate:
         return "0"
     if ext in DSD_EXT or samplerate > 48000:
@@ -216,11 +165,9 @@ def quality_tier(ext: str, samplerate: int) -> str:
         return "1"
     return "2"
 
-
 _cover_cache: dict = {}
 
 def find_cover(directory: str, sd: str):
-    """Return the HiBy-style path to a cover image, or None. Results are cached."""
     if directory in _cover_cache:
         return _cover_cache[directory]
     result = None
@@ -235,56 +182,182 @@ def find_cover(directory: str, sd: str):
     _cover_cache[directory] = result
     return result
 
-
 def find_lrc(audio_path: str, sd: str):
-    """Return the HiBy-style path to a .lrc lyrics file, or None."""
     lrc = os.path.splitext(audio_path)[0] + ".lrc"
     return hiby_path(lrc, sd) if os.path.isfile(lrc) else None
+
+
+# ── Album art embed / resize ──────────────────────────────────────────────────
+
+_PIL_AVAILABLE = False
+try:
+    from PIL import Image as _PILImage
+    _PIL_AVAILABLE = True
+except ImportError:
+    pass
+
+_art_embed_cache: dict = {}   # directory -> resized JPEG bytes (or None)
+_art_embed_failures: list = []
+
+
+def _resize_to_jpeg(data: bytes) -> bytes:
+    """Resize raw image bytes to ART_TARGET_SIZE and return JPEG bytes."""
+    img = _PILImage.open(io.BytesIO(data))
+    if img.mode == "RGBA":
+        bg = _PILImage.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img, mask=img.split()[3])
+        img = bg
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    img = img.resize(ART_TARGET_SIZE, _PILImage.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=90, optimize=True)
+    return out.getvalue()
+
+
+def _load_folder_art(directory: str) -> bytes | None:
+    """Return raw bytes of the folder cover image, or None."""
+    try:
+        entries = {f.lower(): f for f in os.listdir(directory)}
+        for name in COVER_NAMES:
+            if name in entries:
+                with open(os.path.join(directory, entries[name]), "rb") as f:
+                    return f.read()
+    except OSError:
+        pass
+    return None
+
+
+def _get_embedded_art(filepath: str, ext: str) -> bytes | None:
+    """Extract existing embedded cover art bytes from a FLAC or MP3 file."""
+    try:
+        if ext == ".flac":
+            from mutagen.flac import FLAC
+            audio = FLAC(filepath)
+            if audio.pictures:
+                return audio.pictures[0].data
+        elif ext == ".mp3":
+            from mutagen.id3 import ID3
+            tags = ID3(filepath)
+            for tag in tags.values():
+                if tag.FrameID == "APIC":
+                    return tag.data
+    except Exception:
+        pass
+    return None
+
+
+def _embed_flac(filepath: str, art_bytes: bytes) -> bool:
+    try:
+        from mutagen.flac import FLAC, Picture
+        audio = FLAC(filepath)
+        pic = Picture()
+        pic.type = 3        # Front cover
+        pic.mime = "image/jpeg"
+        pic.data = art_bytes
+        img = _PILImage.open(io.BytesIO(art_bytes))
+        pic.width, pic.height = img.size
+        pic.depth = 24
+        audio.clear_pictures()
+        audio.add_picture(pic)
+        audio.save()
+        return True
+    except Exception as e:
+        _art_embed_failures.append((filepath, str(e)))
+        return False
+
+
+def _embed_mp3(filepath: str, art_bytes: bytes) -> bool:
+    try:
+        from mutagen.id3 import ID3, APIC
+        from mutagen.id3 import error as ID3Error
+        from mutagen.mp3 import MP3
+        try:
+            tags = ID3(filepath)
+        except ID3Error:
+            audio = MP3(filepath)
+            audio.add_tags()
+            tags = audio.tags
+        tags.delall("APIC")
+        tags.add(APIC(
+            encoding=3,
+            mime="image/jpeg",
+            type=3,
+            desc="Cover",
+            data=art_bytes,
+        ))
+        tags.save(filepath)
+        return True
+    except Exception as e:
+        _art_embed_failures.append((filepath, str(e)))
+        return False
+
+
+def embed_art(filepath: str, ext: str, directory: str) -> bool:
+    """
+    Embed 360x360 cover art into a FLAC or MP3 file.
+    Priority: folder image > existing embedded art.
+    Returns True if art was embedded successfully.
+    """
+    if not _PIL_AVAILABLE or ext not in (".flac", ".mp3"):
+        return False
+
+    # Use cached resized art per directory if available
+    if directory not in _art_embed_cache:
+        raw = _load_folder_art(directory)
+        if raw is None:
+            raw = _get_embedded_art(filepath, ext)
+        if raw is not None:
+            try:
+                _art_embed_cache[directory] = _resize_to_jpeg(raw)
+            except Exception as e:
+                _art_embed_cache[directory] = None
+                _art_embed_failures.append((filepath, f"resize error: {e}"))
+        else:
+            _art_embed_cache[directory] = None
+
+    art_bytes = _art_embed_cache[directory]
+    if art_bytes is None:
+        return False
+
+    if ext == ".flac":
+        return _embed_flac(filepath, art_bytes)
+    elif ext == ".mp3":
+        return _embed_mp3(filepath, art_bytes)
+    return False
 
 
 # ── SD card detection ─────────────────────────────────────────────────────────
 
 def _list_volumes():
-    """
-    List mounted volumes / drive letters that look like removable media.
-    Returns a list of (path, label) tuples.
-    """
     volumes = []
-    system = os.name  # 'nt' on Windows, 'posix' on macOS/Linux
-
+    system = os.name
     if system == "nt":
-        # Windows: iterate drive letters, check for removable/fixed drives
         import ctypes
         bitmask = ctypes.windll.kernel32.GetLogicalDrives()
         for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
             if bitmask & 1:
                 drive = f"{letter}:\\"
-                # GetDriveTypeW: 2=removable, 3=fixed, 4=network, 5=cdrom, 6=ramdisk
                 dtype = ctypes.windll.kernel32.GetDriveTypeW(drive)
-                if dtype in (2, 3):  # removable or fixed
+                if dtype in (2, 3):
                     try:
                         label_buf = ctypes.create_unicode_buffer(256)
                         ctypes.windll.kernel32.GetVolumeInformationW(
-                            drive, label_buf, 256, None, None, None, None, 0
-                        )
+                            drive, label_buf, 256, None, None, None, None, 0)
                         label = label_buf.value or letter
                     except Exception:
                         label = letter
                     if os.path.isdir(drive):
                         volumes.append((drive, f"{label} ({drive.rstrip(chr(92))})"))
             bitmask >>= 1
-
     elif hasattr(os, "uname") and os.uname().sysname == "Darwin":
-        # macOS: /Volumes/*
         vol_root = "/Volumes"
         if os.path.isdir(vol_root):
             for name in sorted(os.listdir(vol_root)):
                 path = os.path.join(vol_root, name)
                 if os.path.isdir(path) and not name.startswith("."):
                     volumes.append((path, name))
-
     else:
-        # Linux: /media/$USER/*, /mnt/*, /run/media/$USER/*
         user = os.environ.get("USER", "")
         candidates = []
         for base in [f"/media/{user}", "/mnt", f"/run/media/{user}"]:
@@ -298,32 +371,19 @@ def _list_volumes():
                     pass
         for path in candidates:
             volumes.append((path, os.path.basename(path)))
-
     return volumes
 
 
 def find_sd():
-    """
-    Detect the SD card.
-    Priority: 1) script directory, 2) cwd, 3) auto-detect volumes with db,
-              4) interactive selection from mounted volumes.
-    """
-    # 1) Check script directory and cwd (original behaviour)
     for d in [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]:
         if os.path.exists(os.path.join(d, DB_NAME)):
             return d
-
-    # 2) List mounted volumes
     volumes = _list_volumes()
     if not volumes:
         return None
-
-    # 3) Auto-detect: if exactly one volume has the db, use it
     with_db = [(p, l) for p, l in volumes if os.path.exists(os.path.join(p, DB_NAME))]
     if len(with_db) == 1:
         return with_db[0][0]
-
-    # 4) Interactive selection
     print()
     print(bold("Select the SD card drive:"))
     print()
@@ -332,7 +392,6 @@ def find_sd():
         print(f"  {i}) {label}  —  {path}{has_db}")
     print(f"  0) Cancel")
     print()
-
     while True:
         try:
             choice = input("Enter number: ").strip()
@@ -354,12 +413,11 @@ def find_sd():
             return None
 
 
-# ── Tag reading ─────────────────────────────────────────────────────────────
+# ── Tag reading ───────────────────────────────────────────────────────────────
 
-_tag_failures: list = []  # (path, error) for files where Mutagen failed──
+_tag_failures: list = []
 
 def _read_vorbis(audio) -> dict:
-    """Read Vorbis Comment tags from a Mutagen object (EasyFLAC or native FLAC)."""
     def tag(key):
         v = audio.get(key)
         return sanitize(v[0]) if v else None
@@ -369,7 +427,7 @@ def _read_vorbis(audio) -> dict:
 
 
 def read_tags(file: str) -> dict:
-    basename  = os.path.splitext(os.path.basename(file))[0]
+    basename     = os.path.splitext(os.path.basename(file))[0]
     title        = basename
     artist       = "Unknown"
     album        = "Unknown"
@@ -385,15 +443,9 @@ def read_tags(file: str) -> dict:
     disc_num     = 1
     ext          = os.path.splitext(file)[1].lower()
     audio        = None
-
-    _err = None
+    _err         = None
 
     def _open_file(path: str, easy: bool):
-        """Open audio file, retrying with NFC/NFD path variants on ENOENT.
-        On macOS exFAT, os.scandir may return a path in a different Unicode form
-        than what the filesystem accepts, causing spurious file-not-found errors.
-        Mutagen wraps OSError in MutagenError, so we catch Exception and inspect
-        the original cause to decide whether to retry."""
         def _is_enoent(exc) -> bool:
             cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
             if isinstance(cause, OSError):
@@ -401,13 +453,11 @@ def read_tags(file: str) -> dict:
             if isinstance(exc, OSError):
                 return exc.errno == errno.ENOENT
             return "No such file" in str(exc) or "ENOENT" in str(exc)
-
         try:
             return File(path, easy=easy)
         except Exception as e:
             if not _is_enoent(e):
                 return None
-
         for variant in [unicodedata.normalize("NFC", path),
                         unicodedata.normalize("NFD", path)]:
             if variant != path:
@@ -417,10 +467,8 @@ def read_tags(file: str) -> dict:
                     pass
         return None
 
-    # Attempt 1: Mutagen File() with NFC/NFD path fallback.
     audio = _open_file(file, easy=False if ext in DSD_SET else True)
 
-    # Attempt 2: native FLAC() — bypasses EasyFLAC for non-standard tag layouts.
     if audio is None and ext == ".flac":
         try:
             from mutagen.flac import FLAC
@@ -428,7 +476,6 @@ def read_tags(file: str) -> dict:
         except Exception as e:
             _err = e
 
-    # Attempt 3: TinyTag — more lenient, handles corrupt FLAC metadata blocks.
     if audio is None:
         try:
             from tinytag import TinyTag
@@ -452,7 +499,7 @@ def read_tags(file: str) -> dict:
             if tt.channels:   channels   = tt.channels
             if getattr(tt, "bitdepth", None): bitdepth = tt.bitdepth
             if tt.duration:   duration   = int(tt.duration * 1000)
-            audio = "tinytag"  # sentinel: tags already applied
+            audio = "tinytag"
         except Exception as e:
             _err = e
             _tag_failures.append((file, str(_err)))
@@ -462,11 +509,9 @@ def read_tags(file: str) -> dict:
             if ext in DSD_SET and audio.tags:
                 def _id3(key):
                     fid = next((f for f, k in ID3_MAP.items() if k == key), None)
-                    if not fid:
-                        return None
+                    if not fid: return None
                     frame = audio.tags.get(fid)
-                    if frame is None:
-                        return None
+                    if frame is None: return None
                     text = getattr(frame, "text", None)
                     return sanitize(str(text[0])) if text else sanitize(str(frame))
                 td = {k: _id3(k) for k in ID3_MAP.values()}
@@ -504,18 +549,14 @@ def read_tags(file: str) -> dict:
                 bitrate    = int(br) if br else 0
                 length     = getattr(info, "length",  0) or 0
                 duration   = int(length * 1000)
-
         except Exception:
             pass
 
-    # If tags were not read, fall back to the filename.
-    # Strip leading track-number prefix: "04 - Title" → "Title".
     title_final = sanitize(title) or basename
     if title_final == basename or title_final.startswith(basename[:3]):
         title_final = _TRACK_PREFIX_RE.sub("", title_final).strip()
     if not title_final:
         title_final = basename
-
     artist_final = sanitize(artist) or "Unknown"
 
     return {
@@ -538,36 +579,18 @@ def read_tags(file: str) -> dict:
 # ── Filesystem scan ───────────────────────────────────────────────────────────
 
 def _walk(top: str):
-    """
-    Custom directory walker compatible with macOS exFAT and Unicode paths.
-
-    Key issue: on macOS exFAT, reconstructing a file path as
-    os.path.join(parent_dir, filename) can produce a mixed NFC/NFD path
-    that neither macOS nor Python can open, even though os.scandir found
-    the file. Root cause: the parent directory path (NFC after nfd2nfc)
-    and the filename (raw from filesystem, possibly NFD) may be in
-    different Unicode normal forms that exFAT treats as distinct.
-
-    Fix: store e.path for both directories AND files. e.path is computed
-    by the kernel from the same scandir call that found the entry, so it
-    is always internally consistent and openable.
-    """
     try:
         entries = list(os.scandir(top))
     except OSError:
         return
-
-    dir_entries  = []  # (e.path, e.name)
-    file_entries = []  # e.path  ← full path directly from kernel
-
+    dir_entries  = []
+    file_entries = []
     for e in entries:
         if e.is_dir(follow_symlinks=False):
             dir_entries.append((e.path, e.name))
         else:
             file_entries.append(e.path)
-
     yield top, [n for _, n in dir_entries], file_entries
-
     for path, name in dir_entries:
         if not name.startswith("."):
             yield from _walk(path)
@@ -592,13 +615,14 @@ def scan(sd: str):
 
 # ── Database rebuild ──────────────────────────────────────────────────────────
 
-def rebuild_db(sd: str):
+def rebuild_db(sd: str, embed_art_enabled: bool = True):
     _cover_cache.clear()
+    _art_embed_cache.clear()
+    _art_embed_failures.clear()
+
     conn = sqlite3.connect(os.path.join(sd, DB_NAME))
     conn.text_factory = str
     cur = conn.cursor()
-
-    # Speed up bulk insert: no disk sync, journal in RAM.
     cur.execute("PRAGMA synchronous = OFF")
     cur.execute("PRAGMA journal_mode = MEMORY")
     cur.execute("PRAGMA cache_size = -32000")
@@ -609,12 +633,31 @@ def rebuild_db(sd: str):
     audio, playlists = scan(sd)
     print(f"  {len(audio)} audio files, {len(playlists)} playlists  [{time.time()-t0:.1f}s]")
 
+    # ── Album art embed/resize pass ───────────────────────────────────────────
+    art_embedded = 0
+    if embed_art_enabled:
+        if _PIL_AVAILABLE:
+            t_art = time.time()
+            print("Embedding album art (360×360)...")
+            for i, file in enumerate(audio):
+                ext = os.path.splitext(file)[1].lower()
+                if ext in (".flac", ".mp3"):
+                    if i % 200 == 0 and i > 0:
+                        print(f"  {i}/{len(audio)}  [{time.time()-t_art:.0f}s]")
+                    if embed_art(file, ext, os.path.dirname(file)):
+                        art_embedded += 1
+            print(f"  Art embedded in {art_embedded} files  [{time.time()-t_art:.1f}s]")
+            if _art_embed_failures:
+                print(yellow(f"\n  WARNING: Art embed failed for {len(_art_embed_failures)} file(s):"))
+                for path, err in _art_embed_failures:
+                    print(yellow(f"    {path}: {err}"))
+                print()
+        else:
+            print(yellow("  Pillow not installed — skipping art embed. Run: pip install Pillow"))
+
     t1 = time.time()
     print("Reading tags...")
 
-    # Catalog tables use COLLATE NOCASE, so "Queen" and "QUEEN" are the same
-    # primary key in SQLite. Deduplicate case-insensitively before inserting
-    # to avoid UNIQUE constraint failures.
     artists_count, albums_count, genres_count, albart_count = {}, {}, {}, {}
     artists_first, albums_first, genres_first, albart_first = {}, {}, {}, {}
     artists_canon, albums_canon, genres_canon, albart_canon = {}, {}, {}, {}
@@ -675,8 +718,8 @@ def rebuild_db(sd: str):
             tags["track_num"],
             0,
             0,
-            -1,                                              # end_time: -1 for normal tracks
-            -1,                                              # cue_id:   -1 for normal tracks
+            -1,
+            -1,
             sort_character(tags["title"]),
             size,
             tags["samplerate"],
@@ -690,7 +733,7 @@ def rebuild_db(sd: str):
             0.0, 0.0,
             ctime,
             mtime,
-            nul(ascii_upper(_normalize(tags["title"]))),     # pinyin_charater: sort key
+            nul(ascii_upper(_normalize(tags["title"]))),
             nul(alb_art),
         ))
 
@@ -711,8 +754,6 @@ def rebuild_db(sd: str):
     def pinyin(s):
         return nul(ascii_upper(_normalize(s)))
 
-    # ── MEDIA2_TABLE: all tracks, sequential IDs in filesystem path order ──
-    # This is the "master" table. IDs are shared with MEDIA_TABLE.
     _INS_MEDIA = """
         INSERT INTO MEDIA_TABLE
           (id, path, name, album, artist, genre, year,
@@ -728,18 +769,10 @@ def rebuild_db(sd: str):
 
     cur.execute("DELETE FROM MEDIA2_TABLE")
     cur.executemany(_INS_MEDIA2, media_rows)
-
-    # ── MEDIA_TABLE: same data/IDs, inserted in title-sorted rowid order ──
     media_title_sorted = sorted(media_rows, key=lambda r: sort_key(sanitize(r[2])))
     cur.execute("DELETE FROM MEDIA_TABLE")
     cur.executemany(_INS_MEDIA, media_title_sorted)
-
-    # MEDIA3_TABLE: should be empty (used internally by the device).
     cur.execute("DELETE FROM MEDIA3_TABLE")
-
-    # ── Catalog tables: *_TABLE and *2_TABLE are IDENTICAL ──
-    # ID = first MEDIA2_TABLE id for that entity (i.e. artists_first[a]).
-    # Sorted by HiBy collation sort_key(), NOT Python default sort.
 
     artist_rows = sorted(
         [(artists_first[a], nul(a), sort_character(a), cn, 0, 0, pinyin(a))
@@ -804,7 +837,6 @@ def rebuild_db(sd: str):
         [(total,), (len(albums_count),), (len(artists_count),),
          (len(genres_count),), (len(albart_count),)])
 
-    # FORMAT_TABLE and FORMAT2_TABLE: identical, ID = first media id for that format.
     fmt_rows = sorted(
         [(formats_seen[ext], ext.lstrip(".").upper()) for ext in formats_seen],
         key=lambda r: sort_key(r[1])
@@ -820,12 +852,10 @@ def rebuild_db(sd: str):
     cur.execute("DELETE FROM CTIME_TABLE")
     cur.executemany("INSERT INTO CTIME_TABLE (media_id) VALUES (?)",
         [(mid,) for _, mid in sorted(media_ctime, key=lambda x: (x[0], x[1]))])
-
     cur.execute("DELETE FROM MTIME_TABLE")
     cur.executemany("INSERT INTO MTIME_TABLE (media_id) VALUES (?)",
         [(mid,) for _, mid in sorted(media_mtime, key=lambda x: (-x[0], x[1]))])
 
-    # PLAYLIST_TABLE and m3u_N tables are managed by the device — leave them alone.
     cur.execute("DELETE FROM M3U_TABLE")
     if playlists:
         cur.executemany(
@@ -848,6 +878,8 @@ def rebuild_db(sd: str):
     print(green(f"  Genres:        {len(genres_count)}"))
     print(green(f"  Album artists: {len(albart_count)}"))
     print(green(f"  Playlists:     {len(playlists)}"))
+    if embed_art_enabled and _PIL_AVAILABLE:
+        print(green(f"  Art embedded:  {art_embedded} files"))
     print(green("=" * 50))
 
 
@@ -864,7 +896,17 @@ def main():
         print(red(f"  The SD card must already contain the database file"))
         print(red(f"  (copy one from the device first)."))
         return
-    rebuild_db(sd)
+
+    # Prompt for art embedding
+    embed = True
+    if _PIL_AVAILABLE:
+        ans = input("\nEmbed and resize album art to 360×360? [Y/n]: ").strip().lower()
+        embed = ans not in ("n", "no")
+    else:
+        print(yellow("Note: Pillow not installed — album art embedding disabled."))
+        print(yellow("      Run: pip install Pillow"))
+
+    rebuild_db(sd, embed_art_enabled=embed)
 
 
 if __name__ == "__main__":

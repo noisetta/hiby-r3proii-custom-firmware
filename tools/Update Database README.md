@@ -1,10 +1,11 @@
-﻿# Media Database Updater
+# Media Database Updater
 
 Python script that scans the SD card of the HiByOS based DAPs and rebuilds the `usrlocal_media.db` database in a format compatible with the device.
 
-**Compatibility:** macOS · Linux · Windows  
-**Required dependency:** `mutagen` — `pip install mutagen`  
+**Compatibility:** macOS · Linux · Windows
+**Required dependency:** `mutagen` — `pip install mutagen`
 **Optional dependency:** `tinytag` — `pip install tinytag` (fallback for files with corrupt metadata)
+**Optional dependency:** `Pillow` — `pip install Pillow` (required for album art embed/resize)
 
 ---
 
@@ -15,6 +16,8 @@ python Update_Database.py
 ```
 
 No arguments required. The script auto-detects the SD card and starts immediately.
+
+If Pillow is installed, the script will prompt whether to embed and resize album art before building the database.
 
 ### SD Card Detection
 
@@ -34,6 +37,24 @@ Detection follows this priority order:
 | macOS | `/Volumes/*` |
 | Linux | `/media/$USER/*`, `/mnt/*`, `/run/media/$USER/*` |
 | Windows | Drive letters A–Z (type 2 = removable, type 3 = fixed) |
+
+---
+
+## Album Art Embedding
+
+When Pillow is installed, the script can embed and resize cover art directly into FLAC and MP3 files before rebuilding the database.
+
+**Target size:** 360×360px — the native display area of the R3 Pro II screen. Oversized art wastes RAM and can cause navigation lag.
+
+**Source priority (per album folder):**
+1. Folder image — `cover.jpg`, `folder.jpg`, `front.jpg`, `albumart.jpg` (and `.jpeg` / `.png` variants)
+2. Existing embedded art — extracted from the first file in the folder that has it
+
+Art is resized using the Lanczos algorithm and saved as JPEG (quality 90) before embedding. RGBA/PNG images are composited onto a white background before conversion. Results are cached per directory, so albums with many tracks only resize once.
+
+Files for which art embed fails are counted and reported in the summary.
+
+> **Note:** Only FLAC and MP3 files are supported for embedding. Other formats are skipped.
 
 ---
 
@@ -226,25 +247,26 @@ All inserts use `executemany()` with pre-built lists of tuples.
 
 ## Console Output
 
-The script uses ANSI colors when the terminal supports them (`NO_COLOR` is respected; on Windows, Virtual Terminal Processing is enabled via `ctypes`).
-
 ```
 Scanning SD card...
   1842 audio files, 12 playlists  [0.3s]
+Embedding album art (360×360)...
+  Art embedded in 1821 files  [12.4s]
 Reading tags...
   Tags read in 4.2s
 Writing database...
   Database written in 0.8s
 
 ==================================================
-  Done in 5.4s
+  Done in 17.7s
   Tracks:        1842
-  Albums:        187
-  Artists:        94
-  Genres:         12
-  Album artists:  91
-  Playlists:      12
+  Albums:         187
+  Artists:         94
+  Genres:          12
+  Album artists:   91
+  Playlists:       12
+  Art embedded:  1821 files
 ==================================================
 ```
 
-Warnings for unreadable tag files are printed in yellow before the write phase.
+Warnings for unreadable tag files or art embed failures are printed in yellow before the write phase.
