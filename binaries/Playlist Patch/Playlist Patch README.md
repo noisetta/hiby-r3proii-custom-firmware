@@ -117,5 +117,5 @@ File offset  VA          Original bytes   Patched bytes    Description
 - [x] Language radio button indicator shows the correct selection
 - [x] Playlist Create / Save / Load buttons work normally
 - [x] No three-dot icon on the fixed items (Create, Save, Load)
-- [ ] Database Manager: "Copy DB to SD" works correctly
-- [ ] Database Manager: "Copy DB from SD" works correctly
+- [x] Database Manager: "Copy DB to SD" works correctly
+- [x] Database Manager: "Copy DB from SD" works correctly
