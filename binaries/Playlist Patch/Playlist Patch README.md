@@ -100,7 +100,6 @@ All offsets are relative to the start of the ELF file (file offsets). The ELF ba
 ```
 File offset  VA          Original bytes   Patched bytes    Description
 ─────────────────────────────────────────────────────────────────────────
-0x01C0B4     0x0041C0B4  (must be nop)    00 00 00 00      DB Manager delay slot guard
 0x01C0B8     0x0041C0B8  00 00 00 00 ...  (28 bytes)       get_language code cave
 0x02A9B8     0x0042A9B8  08 00 42 8C      25 10 00 00      case 5 → return NULL
 0x0B3144     0x004B3144  04 00 04 24      03 00 04 24      click handler: 4→3
