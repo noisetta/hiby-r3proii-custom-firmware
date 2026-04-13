@@ -296,4 +296,4 @@ The `save_to_sd` and `copy_from_sd` keys are read by the generator wrapper to po
 
 # Other patches included in the binary
 
-This binary also contains the the Sorting Patch. For details see: [Sorting Patch README.md](https://github.com/hiby-modding/hiby-mods/blob/main/binaries/Sorting%20Patch/Sorting%20Patch%20README.md)
+This binary also contains the Sorting Patch. For details see: [Sorting Patch README.md](https://github.com/hiby-modding/hiby-mods/blob/main/binaries/Sorting%20Patch/Sorting%20Patch%20README.md)
