@@ -293,3 +293,7 @@ The `save_to_sd` and `copy_from_sd` keys are read by the generator wrapper to po
 |---|---|
 | `/usr/data/usrlocal_media.db` | Media database on the device (also referenced as `/data/usrlocal_media.db`) |
 | `/usr/data/mnt/sd_0/` | SD card mount point |
+
+# Other patches included in the binary
+
+This binary also contains the Sorting Patch. For details see: [Sorting Patch README.md](https://github.com/hiby-modding/hiby-mods/blob/main/binaries/Sorting%20Patch/Sorting%20Patch%20README.md)
