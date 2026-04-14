@@ -1,5 +1,7 @@
 ﻿# Done Dialog Patch for DB Manager
 
+## Binary SHA256: `b4ca19e33dc79c250115f37b23c445c4eb7f42adf1a2198e26109ef2b79dcb09`
+
 ## Overview
 
 This patch adds a **"Done!"** popup dialog that appears for 2 seconds after the Database Manager completes either a Save or Copy operation. Previously, the user had no visual feedback that the operation had finished.
