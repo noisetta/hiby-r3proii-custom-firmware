@@ -218,7 +218,14 @@ def _get_embedded_art(filepath: str, ext: str) -> bytes | None:
             if audio.tags:
                 pics = audio.tags.get("WM/Picture")
                 if pics:
-                    return pics[0].value
+                    raw = pics[0].value
+                    if isinstance(raw, bytes):
+                        jpg_start = raw.find(b"\xff\xd8")
+                        if jpg_start >= 0:
+                            return raw[jpg_start:]
+                        png_start = raw.find(b"\x89PNG")
+                        if png_start >= 0:
+                            return raw[png_start:]
 
         elif ext == ".ape":
             from mutagen.apev2 import APEv2
